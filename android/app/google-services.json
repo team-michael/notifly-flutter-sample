@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "264157265354",
+    "firebase_url": "https://michael-359102-default-rtdb.firebaseio.com",
+    "project_id": "michael-359102",
+    "storage_bucket": "michael-359102.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:264157265354:android:b414fd2875ea4a6d49e333",
+        "android_client_info": {
+          "package_name": "com.example.notifly_flutter_sample"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "264157265354-cf0sua5q46237o95vrdf965veiknj1ga.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDc0h3eTTvCkbursQBdxMOpBYG-QUrffrw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "264157265354-cf0sua5q46237o95vrdf965veiknj1ga.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
