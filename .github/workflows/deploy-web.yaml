@@ -1,0 +1,65 @@
+name: Deploy Flutter Web App to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NOTIFLY_PROJECT_ID: ${{ secrets.NOTIFLY_PROJECT_ID }}
+      NOTIFLY_USERNAME: ${{ secrets.NOTIFLY_USERNAME }}
+      NOTIFLY_PASSWORD: ${{ secrets.NOTIFLY_PASSWORD }}
+      FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
+      FIREBASE_WEB_APP_ID: ${{ secrets.FIREBASE_WEB_APP_ID }}
+      FIREBASE_WEB_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_WEB_MESSAGING_SENDER_ID }}
+      FIREBASE_WEB_PROJECT_ID: ${{ secrets.FIREBASE_WEB_PROJECT_ID }}
+      FIREBASE_WEB_AUTH_DOMAIN: ${{ secrets.FIREBASE_WEB_AUTH_DOMAIN }}
+      FIREBASE_WEB_DATABASE_URL: ${{ secrets.FIREBASE_WEB_DATABASE_URL }}
+      FIREBASE_WEB_STORAGE_BUCKET: ${{ secrets.FIREBASE_WEB_STORAGE_BUCKET }}
+      FIREBASE_WEB_MEASUREMENT_ID: ${{ secrets.FIREBASE_WEB_MEASUREMENT_ID }}
+      FIREBASE_ANDROID_API_KEY: ${{ secrets.FIREBASE_ANDROID_API_KEY }}
+      FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+      FIREBASE_ANDROID_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_ANDROID_MESSAGING_SENDER_ID }}
+      FIREBASE_ANDROID_PROJECT_ID: ${{ secrets.FIREBASE_ANDROID_PROJECT_ID }}
+      FIREBASE_ANDROID_DATABASE_URL: ${{ secrets.FIREBASE_ANDROID_DATABASE_URL }}
+      FIREBASE_ANDROID_STORAGE_BUCKET: ${{ secrets.FIREBASE_ANDROID_STORAGE_BUCKET }}
+      FIREBASE_IOS_API_KEY: ${{ secrets.FIREBASE_IOS_API_KEY }}
+      FIREBASE_IOS_APP_ID: ${{ secrets.FIREBASE_IOS_APP_ID }}
+      FIREBASE_IOS_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_IOS_MESSAGING_SENDER_ID }}
+      FIREBASE_IOS_PROJECT_ID: ${{ secrets.FIREBASE_IOS_PROJECT_ID }}
+      FIREBASE_IOS_DATABASE_URL: ${{ secrets.FIREBASE_IOS_DATABASE_URL }}
+      FIREBASE_IOS_STORAGE_BUCKET: ${{ secrets.FIREBASE_IOS_STORAGE_BUCKET }}
+      FIREBASE_IOS_BUNDLE_ID: ${{ secrets.FIREBASE_IOS_BUNDLE_ID }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Build web
+        run: flutter build web --base-href /${{ github.event.repository.name }}/
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: ./build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v2
