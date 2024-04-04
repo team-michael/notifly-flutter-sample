@@ -68,6 +68,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // background messaging 핸들링
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   runApp(const MyApp());
 }
 
@@ -179,24 +183,12 @@ class _HomePageState extends State<HomePage> {
 
     // Foreground 메시지 처리
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print("Received a message while the app is in foreground");
-      print("Message data: ${message.data}");
-      print("Message notification: ${message.notification?.title}");
       _showNotification(message);
-    });
-
-    // Background 메시지 클릭 시 처리
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print("Received a message while the app is in background");
-      print("Message data: ${message.data}");
-      _handleBackgroundMessage(message);
     });
 
     // Terminate 상태에서 메시지 클릭 시 처리
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
-      print("Received a message while the app is terminated");
-      print("Message data: ${initialMessage.data}");
       _handleTerminatedMessage(initialMessage);
     }
   }
@@ -533,14 +525,13 @@ void _showNotification(RemoteMessage message) async {
   }
 }
 
-void _handleBackgroundMessage(RemoteMessage message) {
-  print("Handling a background message: ${message.messageId}");
-  // 여기에 백그라운드에서 메시지 클릭 시 수행할 작업을 추가하세요.
-  // 예를 들어, 특정 화면으로 이동할 수 있습니다.
-}
-
 void _handleTerminatedMessage(RemoteMessage message) {
   print("Handling a terminated message: ${message.messageId}");
   // 여기에 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업을 추가하세요.
   // 예를 들어, 특정 화면으로 이동할 수 있습니다.
+}
+
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // 여기에 백그라운드에서 메시지 수신 시 수행할 작업을 추가하세요.
+  print("Handling a background message: ${message.messageId}");
 }
