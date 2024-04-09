@@ -78,7 +78,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
       - name: Build web
-        run: flutter build web --base-href /${{ github.event.repository.name }}/
+        run: flutter build web
+      - name: Copy 404 page
+        run: cp web/404.html build/web/
       - name: Copy service worker
         run: |
           cp ./web/notifly-service-worker.js ./build/web/
