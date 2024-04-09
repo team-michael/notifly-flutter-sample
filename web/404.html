@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<script>
+  // 서비스 워커 파일을 제외한 모든 요청을 리다이렉트합니다.
+  if (
+    window.location.pathname !==
+    "/notifly-flutter-sample/notifly-service-worker.js"
+  ) {
+    window.location.href = "/notifly-flutter-sample" + window.location.pathname;
+  }
+</script>
