@@ -81,7 +81,8 @@ jobs:
         run: flutter build web --base-href /${{ github.event.repository.name }}/
       - name: Copy service worker
         run: |
-          cp ./web/notifly-service-worker.js ./build/web/
+          mkdir -p ./build/web/notifly-flutter-sample/
+          cp ./web/notifly-service-worker.js ./build/web/notifly-flutter-sample/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
