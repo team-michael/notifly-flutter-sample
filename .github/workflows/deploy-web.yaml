@@ -75,11 +75,13 @@ jobs:
           echo "FIREBASE_IOS_STORAGE_BUCKET=${{ secrets.FIREBASE_IOS_STORAGE_BUCKET }}" >> assets/.env
           echo "FIREBASE_IOS_BUNDLE_ID=${{ secrets.FIREBASE_IOS_BUNDLE_ID }}" >> assets/.env
         shell: bash
-
       - name: Get dependencies
         run: flutter pub get
       - name: Build web
         run: flutter build web --base-href /${{ github.event.repository.name }}/
+      - name: Copy service worker
+        run: |
+          cp ./web/notifly-service-worker.js ./build/web/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
