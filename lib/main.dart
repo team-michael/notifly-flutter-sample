@@ -1,6 +1,8 @@
 // ignore_for_file: library_private_types_in_public_api
 
 import 'dart:io';
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,13 +19,14 @@ import 'package:notifly_flutter/notifly_flutter.dart';
 class MyNotifManager {
   static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
-  static final onNotifications = BehaviorSubject<String?>();
+  // static final onNotifications = BehaviorSubject<RemoteMessage?>(); - Pub/Sub 패턴 클릭 핸들러 고도화
 
   static Future<void> init() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('mipmap/ic_launcher');
     final DarwinInitializationSettings initializationSettingsIOS =
         DarwinInitializationSettings(
+            // iOS 9 이하 버전에서 로컬 알림을 클릭했을 때 호출
             onDidReceiveLocalNotification: (id, title, body, payload) async {});
     final InitializationSettings initializationSettings =
         InitializationSettings(
@@ -37,10 +40,17 @@ class MyNotifManager {
     );
   }
 
+  // 알림 클릭 시 수행할 작업
   static void onDidReceiveNotificationResponse(
       NotificationResponse notificationResponse) async {
-    print('onDidReceiveNotificationResponse: ${notificationResponse.payload}');
-    onNotifications.add(notificationResponse.payload);
+    final String payload = notificationResponse.payload ?? '';
+    if (payload.isEmpty) {
+      return;
+    }
+    final Map<String, dynamic> data = jsonDecode(payload);
+    final RemoteMessage message = RemoteMessage.fromMap(data);
+    await _handlePushNotificationClicked(message);
+    // or onNotifications.add(message); - Pub/Sub 패턴으로 구현
   }
 }
 
@@ -69,8 +79,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // background messaging 핸들링
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // background messaging 수신 핸들링
+  FirebaseMessaging.onBackgroundMessage(_handlePushNotificationReceived);
+  // background messaging 클릭 핸들링
+  FirebaseMessaging.onMessageOpenedApp.listen(_handlePushNotificationClicked);
 
   runApp(const MyApp());
 }
@@ -168,12 +180,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> listenNotification() async {
-    MyNotifManager.onNotifications.listen((String? payload) {
-      print('Notification payload: $payload');
-      _navigateToItemDetail(payload);
-    });
-  }
+  // Future<void> listenLocalNotifClickAction() async {
+  //   // Subscribe to the stream of notifications
+  //   MyNotifManager.onNotifications.listen((RemoteMessage? message) async {
+  //     if (message != null) {
+  //       await _handlePushNotificationClicked(message);
+  //     }
+  //   });
+  // }
 
   Future<void> initListeners() async {
     final permission = await _messaging.requestPermission();
@@ -181,15 +195,18 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    // Foreground 메시지 처리
+    // Foreground 수신 메시지 처리
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _showNotification(message);
+      _handlePushNotificationReceived(message);
+
+      // Local 푸시 생성 및 표시
+      _showLocalPushNotification(message);
     });
 
-    // Terminate 상태에서 메시지 클릭 시 처리
+    // [Advanced] 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업 - handle cold start notification
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
-      _handleTerminatedMessage(initialMessage);
+      // await _handlePushNotificationClicked(initialMessage);
     }
   }
 
@@ -198,8 +215,8 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _getToken();
     MyNotifManager.init();
-    listenNotification();
     initListeners();
+    // listenLocalNotifClickAction(); // Pub/Sub 패턴 클릭 핸들러 고도화
   }
 
   Future<void> _getToken() async {
@@ -480,7 +497,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-void _showNotification(RemoteMessage message) async {
+void _showLocalPushNotification(RemoteMessage message) async {
   // 알림 채널 설정
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'high_importance_channel', // 채널 ID
@@ -517,21 +534,37 @@ void _showNotification(RemoteMessage message) async {
       ),
     );
     await flutterLocalNotificationsPlugin.show(
-      0,
-      notification.title,
-      notification.body,
-      platformChannelSpecifics,
-    );
+        0, notification.title, notification.body, platformChannelSpecifics,
+        payload: jsonEncode(message.toMap()));
   }
 }
 
-void _handleTerminatedMessage(RemoteMessage message) {
-  print("Handling a terminated message: ${message.messageId}");
-  // 여기에 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업을 추가하세요.
-  // 예를 들어, 특정 화면으로 이동할 수 있습니다.
+Future<void> _handlePushNotificationClicked(RemoteMessage message) async {
+  print("[🔥Notifly] Push Notification Clicked!");
+  final Map<String, dynamic>? notification = message.notification?.toMap();
+  final Map<String, dynamic> data = message.data;
+  print("[🔥Notifly] notification: $notification");
+  print("[🔥Notifly] data: $data");
+  await NotiflyPlugin.trackEvent(eventName: 'click');
+
+  /* 
+    TODO: 알림 클릭 시 수행할 작업을 추가하세요.
+    1. 딥링크 또는 URL 처리
+    2. 푸시 알림 클릭 이벤트 로깅
+  */
 }
 
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // 여기에 백그라운드에서 메시지 수신 시 수행할 작업을 추가하세요.
-  print("Handling a background message: ${message.messageId}");
+Future<void> _handlePushNotificationReceived(RemoteMessage message) async {
+  print("[🔥Notifly] Push Notification Received!");
+  final Map<String, dynamic>? notification = message.notification?.toMap();
+  final Map<String, dynamic> data = message.data;
+  print("[🔥Notifly] notification: $notification");
+  print("[🔥Notifly] data: $data");
+  await NotiflyPlugin.trackEvent(eventName: 'deliver');
+
+  /* 
+    TODO: 알림 수신 시 수행할 작업을 추가하세요.
+    1. 알림을 기기에 저장 (추후 알림함 구현시 사용)
+    2. 푸시 알림 수신 이벤트 로깅
+  */
 }
