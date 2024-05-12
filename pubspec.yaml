@@ -37,7 +37,7 @@ dependencies:
   url_launcher: ^6.2.5
   rxdart: ^0.27.7
   flutter_dotenv: ^5.0.2
-  notifly_flutter: ^1.4.0
+  notifly_flutter: ^1.5.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

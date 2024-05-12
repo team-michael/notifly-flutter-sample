@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-# platform :ios, '12.0'
+platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -35,6 +35,11 @@ target 'Runner' do
   target 'RunnerTests' do
     inherit! :search_paths
   end
+end
+
+target 'NotiflyNotificationExtension' do
+  use_frameworks! :linkage => :static
+  pod 'notifly_sdk', '1.7.0', :subspecs => ['Extension']
 end
 
 post_install do |installer|
