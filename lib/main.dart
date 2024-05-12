@@ -206,7 +206,7 @@ class _HomePageState extends State<HomePage> {
     // [Advanced] 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업 - handle cold start notification
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
-      // await _handlePushNotificationClicked(initialMessage);
+      await _handlePushNotificationClicked(initialMessage);
     }
   }
 
