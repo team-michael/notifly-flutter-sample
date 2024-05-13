@@ -269,6 +269,7 @@ class _HomePageState extends State<HomePage> {
         permission.authorizationStatus == AuthorizationStatus.authorized;
     if (permission.authorizationStatus == AuthorizationStatus.denied) {
       print("[🔥Notifly] Permission denied.");
+      return;
     }
     await _initListeners();
   }
