@@ -52,6 +52,54 @@ class MyNotifManager {
     await _handlePushNotificationClicked(message);
     // or onNotifications.add(message); - Pub/Sub 패턴으로 구현
   }
+
+  static void _showLocalPushNotification(RemoteMessage message) async {
+    await MyNotifManager.mayCreateAndroidNotificationChannel();
+
+    final notification = message.notification;
+    if (notification == null) {
+      return;
+    }
+
+    const platformChannelSpecifics = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'channel id',
+        'channel name',
+        channelDescription: 'channel description',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: 'mipmap/ic_launcher',
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        badgeNumber: 1,
+      ),
+    );
+
+    // 알림 표시
+    await flutterLocalNotificationsPlugin.show(
+        0, notification.title, notification.body, platformChannelSpecifics,
+        payload: jsonEncode(message.toMap()));
+  }
+
+  static Future<void> mayCreateAndroidNotificationChannel() async {
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel', // 채널 ID
+      'High Importance Notifications', // 채널 이름
+      description: 'This channel is used for important notifications.', // 채널 설명
+      importance: Importance.max, // 중요도 설정
+    );
+
+    // 알림 채널 생성
+    final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      androidPlugin.createNotificationChannel(channel);
+    }
+  }
 }
 
 AndroidNotificationChannel channel = const AndroidNotificationChannel(
@@ -114,6 +162,8 @@ class _HomePageState extends State<HomePage> {
   String _token = '';
   String _userId = '';
   String _notiflyEvent = '';
+  bool _authorized = false;
+
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _bodyController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
@@ -189,22 +239,20 @@ class _HomePageState extends State<HomePage> {
   //   });
   // }
 
-  Future<void> initListeners() async {
-    final permission = await _messaging.requestPermission();
-    if (permission.authorizationStatus == AuthorizationStatus.denied) {
+  Future<void> _initListeners() async {
+    if (!_authorized) {
       return;
     }
-
     // Foreground 수신 메시지 처리
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      // Foreground 수신 메시지 알림 생성 - ONLY Android
       RemoteNotification? notification = message.notification;
       AndroidNotification? android = message.notification?.android;
-      // Foreground 수신 메시지 알림 생성 - ONLY Android
       if (notification != null && android != null) {
-        _showLocalPushNotification(message); // 로컬 푸시 알림 표시
+        MyNotifManager._showLocalPushNotification(message);
       }
 
-      _handlePushNotificationReceived(message);
+      _handlePushNotificationReceived(message); // 수신 핸들러 호출
     });
 
     // Foreground 수신 메시지 알림 생성 - ONLY iOS
@@ -221,12 +269,23 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _requestPermission() async {
+    final permission = await _messaging.requestPermission();
+    _authorized =
+        permission.authorizationStatus == AuthorizationStatus.authorized;
+
+    if (permission.authorizationStatus == AuthorizationStatus.denied) {
+      print("[🔥Notifly] Permission denied.");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _requestPermission();
     _getToken();
     MyNotifManager.init();
-    initListeners();
+    _initListeners();
     // listenLocalNotifClickAction(); // Pub/Sub 패턴 클릭 핸들러 고도화
   }
 
@@ -508,48 +567,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-  }
-}
-
-void _showLocalPushNotification(RemoteMessage message) async {
-  // 알림 채널 설정
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'high_importance_channel', // 채널 ID
-    'High Importance Notifications', // 채널 이름
-    description: 'This channel is used for important notifications.', // 채널 설명
-    importance: Importance.max, // 중요도 설정
-  );
-
-  // 알림 채널 생성
-  final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
-      flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-  if (androidPlugin != null) {
-    await androidPlugin.createNotificationChannel(channel);
-  }
-
-  // 알림 표시
-  final notification = message.notification;
-  final android = message.notification?.android;
-  if (notification != null && android != null) {
-    const platformChannelSpecifics = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'channel id', 'channel name',
-        channelDescription: 'channel description',
-        importance: Importance.max,
-        priority: Priority.high,
-        icon: 'mipmap/ic_launcher', // 알림 아이콘 추가
-      ),
-      iOS: DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        badgeNumber: 1,
-      ),
-    );
-    await flutterLocalNotificationsPlugin.show(
-        0, notification.title, notification.body, platformChannelSpecifics,
-        payload: jsonEncode(message.toMap()));
   }
 }
 
