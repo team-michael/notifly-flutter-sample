@@ -16,7 +16,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:notifly_flutter/notifly_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-
 class MyNotifManager {
   static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -198,12 +197,24 @@ class _HomePageState extends State<HomePage> {
 
     // Foreground 수신 메시지 처리
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+      // Foreground 수신 메시지 알림 생성 - ONLY Android
+      if (notification != null && android != null) {
+        _showLocalPushNotification(message); // 로컬 푸시 알림 표시
+      }
+
       _handlePushNotificationReceived(message);
-      // Local 푸시 생성 및 표시
-      _showLocalPushNotification(message);
     });
 
-    // [Advanced] 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업 - handle cold start notification
+    // Foreground 수신 메시지 알림 생성 - ONLY iOS
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true, // Required to display a heads up notification
+      badge: true,
+      sound: true,
+    );
+
+    // 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업 - handle cold start notification
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       await _handlePushNotificationClicked(initialMessage);
@@ -548,7 +559,6 @@ Future<void> _handlePushNotificationClicked(RemoteMessage message) async {
   final Map<String, dynamic> data = message.data;
   print("[🔥Notifly] notification: $notification");
   print("[🔥Notifly] data: $data");
-  await NotiflyPlugin.trackEvent(eventName: 'click');
 
   /* 
     TODO: 알림 클릭 시 수행할 작업을 추가하세요.
@@ -563,8 +573,7 @@ Future<void> _handlePushNotificationReceived(RemoteMessage message) async {
   final Map<String, dynamic> data = message.data;
   print("[🔥Notifly] notification: $notification");
   print("[🔥Notifly] data: $data");
-  await NotiflyPlugin.trackEvent(eventName: 'deliver');
-
+  NotiflyPlugin.trackEvent(eventName: 'push_received22');
   /* 
     TODO: 알림 수신 시 수행할 작업을 추가하세요.
     1. 알림을 기기에 저장 (추후 알림함 구현시 사용)
