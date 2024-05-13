@@ -54,7 +54,7 @@ class MyNotifManager {
   }
 
   static void _showLocalPushNotification(RemoteMessage message) async {
-    mayCreateAndroidNotificationChannel();
+    await mayCreateAndroidNotificationChannel();
     final notification = message.notification;
     if (notification == null) {
       return;
