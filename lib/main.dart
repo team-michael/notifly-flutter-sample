@@ -55,12 +55,10 @@ class MyNotifManager {
 
   static void _showLocalPushNotification(RemoteMessage message) async {
     mayCreateAndroidNotificationChannel();
-
     final notification = message.notification;
     if (notification == null) {
       return;
     }
-
     const platformChannelSpecifics = NotificationDetails(
       android: AndroidNotificationDetails(
         'channel id',
@@ -77,7 +75,6 @@ class MyNotifManager {
         badgeNumber: 1,
       ),
     );
-
     // 알림 표시
     await flutterLocalNotificationsPlugin.show(
         0, notification.title, notification.body, platformChannelSpecifics,
@@ -240,9 +237,6 @@ class _HomePageState extends State<HomePage> {
   // }
 
   Future<void> _initListeners() async {
-    if (!_authorized) {
-      return;
-    }
     // Foreground 수신 메시지 처리
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       // Foreground 수신 메시지 알림 생성 - ONLY Android
@@ -273,10 +267,10 @@ class _HomePageState extends State<HomePage> {
     final permission = await _messaging.requestPermission();
     _authorized =
         permission.authorizationStatus == AuthorizationStatus.authorized;
-
     if (permission.authorizationStatus == AuthorizationStatus.denied) {
       print("[🔥Notifly] Permission denied.");
     }
+    await _initListeners();
   }
 
   @override
@@ -285,7 +279,6 @@ class _HomePageState extends State<HomePage> {
     _requestPermission();
     _getToken();
     MyNotifManager.init();
-    _initListeners();
     // listenLocalNotifClickAction(); // Pub/Sub 패턴 클릭 핸들러 고도화
   }
 
