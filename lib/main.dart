@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:flutter/material.dart';
@@ -15,6 +14,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:notifly_flutter/notifly_flutter.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 
 class MyNotifManager {
   static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -198,7 +199,6 @@ class _HomePageState extends State<HomePage> {
     // Foreground 수신 메시지 처리
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _handlePushNotificationReceived(message);
-
       // Local 푸시 생성 및 표시
       _showLocalPushNotification(message);
     });
@@ -223,6 +223,9 @@ class _HomePageState extends State<HomePage> {
     String? token = await FirebaseMessaging.instance.getToken();
     setState(() {
       _token = token ?? '';
+      if (_token.isNotEmpty) {
+        // TODO: 서버에 토큰 전송
+      }
     });
   }
 
