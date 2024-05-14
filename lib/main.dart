@@ -1,8 +1,9 @@
 // ignore_for_file: library_private_types_in_public_api
 
 import 'dart:io';
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:flutter/material.dart';
@@ -13,17 +14,19 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:notifly_flutter/notifly_flutter.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class MyNotifManager {
   static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
-  static final onNotifications = BehaviorSubject<String?>();
+  // static final onNotifications = BehaviorSubject<RemoteMessage?>(); - Pub/Sub 패턴 클릭 핸들러 고도화
 
   static Future<void> init() async {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('mipmap/ic_launcher');
     final DarwinInitializationSettings initializationSettingsIOS =
         DarwinInitializationSettings(
+            // iOS 9 이하 버전에서 로컬 알림을 클릭했을 때 호출
             onDidReceiveLocalNotification: (id, title, body, payload) async {});
     final InitializationSettings initializationSettings =
         InitializationSettings(
@@ -37,10 +40,62 @@ class MyNotifManager {
     );
   }
 
+  // 알림 클릭 시 수행할 작업
   static void onDidReceiveNotificationResponse(
       NotificationResponse notificationResponse) async {
-    print('onDidReceiveNotificationResponse: ${notificationResponse.payload}');
-    onNotifications.add(notificationResponse.payload);
+    final String payload = notificationResponse.payload ?? '';
+    if (payload.isEmpty) {
+      return;
+    }
+    final Map<String, dynamic> data = jsonDecode(payload);
+    final RemoteMessage message = RemoteMessage.fromMap(data);
+    await _handlePushNotificationClicked(message);
+    // or onNotifications.add(message); - Pub/Sub 패턴으로 구현
+  }
+
+  static void _showLocalPushNotification(RemoteMessage message) async {
+    await mayCreateAndroidNotificationChannel();
+    final notification = message.notification;
+    if (notification == null) {
+      return;
+    }
+    const platformChannelSpecifics = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'channel id',
+        'channel name',
+        channelDescription: 'channel description',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: 'mipmap/ic_launcher',
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        badgeNumber: 1,
+      ),
+    );
+    // 알림 표시
+    await flutterLocalNotificationsPlugin.show(
+        0, notification.title, notification.body, platformChannelSpecifics,
+        payload: jsonEncode(message.toMap()));
+  }
+
+  static Future<void> mayCreateAndroidNotificationChannel() async {
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'high_importance_channel', // 채널 ID
+      'High Importance Notifications', // 채널 이름
+      description: 'This channel is used for important notifications.', // 채널 설명
+      importance: Importance.max, // 중요도 설정
+    );
+
+    // 알림 채널 생성
+    final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+        flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      androidPlugin.createNotificationChannel(channel);
+    }
   }
 }
 
@@ -69,8 +124,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // background messaging 핸들링
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // background messaging 수신 핸들링
+  FirebaseMessaging.onBackgroundMessage(_handlePushNotificationReceived);
+  // background messaging 클릭 핸들링
+  FirebaseMessaging.onMessageOpenedApp.listen(_handlePushNotificationClicked);
 
   runApp(const MyApp());
 }
@@ -102,6 +159,8 @@ class _HomePageState extends State<HomePage> {
   String _token = '';
   String _userId = '';
   String _notiflyEvent = '';
+  bool _authorized = false;
+
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _bodyController = TextEditingController();
   final TextEditingController _urlController = TextEditingController();
@@ -168,44 +227,69 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> listenNotification() async {
-    MyNotifManager.onNotifications.listen((String? payload) {
-      print('Notification payload: $payload');
-      _navigateToItemDetail(payload);
-    });
-  }
+  // Future<void> listenLocalNotifClickAction() async {
+  //   // Subscribe to the stream of notifications
+  //   MyNotifManager.onNotifications.listen((RemoteMessage? message) async {
+  //     if (message != null) {
+  //       await _handlePushNotificationClicked(message);
+  //     }
+  //   });
+  // }
 
-  Future<void> initListeners() async {
-    final permission = await _messaging.requestPermission();
-    if (permission.authorizationStatus == AuthorizationStatus.denied) {
-      return;
-    }
-
-    // Foreground 메시지 처리
+  Future<void> _initListeners() async {
+    // Foreground 수신 메시지 처리
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _showNotification(message);
+      // Foreground 수신 메시지 알림 생성 - ONLY Android
+      RemoteNotification? notification = message.notification;
+      AndroidNotification? android = message.notification?.android;
+      if (notification != null && android != null) {
+        MyNotifManager._showLocalPushNotification(message);
+      }
+
+      _handlePushNotificationReceived(message); // 수신 핸들러 호출
     });
 
-    // Terminate 상태에서 메시지 클릭 시 처리
+    // Foreground 수신 메시지 알림 생성 - ONLY iOS
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true, // Required to display a heads up notification
+      badge: true,
+      sound: true,
+    );
+
+    // 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업 - handle cold start notification
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
-      _handleTerminatedMessage(initialMessage);
+      await _handlePushNotificationClicked(initialMessage);
     }
+  }
+
+  Future<void> _requestPermission() async {
+    final permission = await _messaging.requestPermission();
+    _authorized =
+        permission.authorizationStatus == AuthorizationStatus.authorized;
+    if (permission.authorizationStatus == AuthorizationStatus.denied) {
+      print("[🔥Notifly] Permission denied.");
+      return;
+    }
+    await _initListeners();
   }
 
   @override
   void initState() {
     super.initState();
+    _requestPermission();
     _getToken();
     MyNotifManager.init();
-    listenNotification();
-    initListeners();
+    // listenLocalNotifClickAction(); // Pub/Sub 패턴 클릭 핸들러 고도화
   }
 
   Future<void> _getToken() async {
     String? token = await FirebaseMessaging.instance.getToken();
     setState(() {
       _token = token ?? '';
+      if (_token.isNotEmpty) {
+        // TODO: 서버에 토큰 전송
+      }
     });
   }
 
@@ -480,58 +564,29 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-void _showNotification(RemoteMessage message) async {
-  // 알림 채널 설정
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'high_importance_channel', // 채널 ID
-    'High Importance Notifications', // 채널 이름
-    description: 'This channel is used for important notifications.', // 채널 설명
-    importance: Importance.max, // 중요도 설정
-  );
+Future<void> _handlePushNotificationClicked(RemoteMessage message) async {
+  print("[🔥Notifly] Push Notification Clicked!");
+  final Map<String, dynamic>? notification = message.notification?.toMap();
+  final Map<String, dynamic> data = message.data;
+  print("[🔥Notifly] notification: $notification");
+  print("[🔥Notifly] data: $data");
 
-  // 알림 채널 생성
-  final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
-      flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-  if (androidPlugin != null) {
-    await androidPlugin.createNotificationChannel(channel);
-  }
-
-  // 알림 표시
-  final notification = message.notification;
-  final android = message.notification?.android;
-  if (notification != null && android != null) {
-    const platformChannelSpecifics = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'channel id', 'channel name',
-        channelDescription: 'channel description',
-        importance: Importance.max,
-        priority: Priority.high,
-        icon: 'mipmap/ic_launcher', // 알림 아이콘 추가
-      ),
-      iOS: DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        badgeNumber: 1,
-      ),
-    );
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      notification.title,
-      notification.body,
-      platformChannelSpecifics,
-    );
-  }
+  /* 
+    TODO: 알림 클릭 시 수행할 작업을 추가하세요.
+    1. 딥링크 또는 URL 처리
+    2. 푸시 알림 클릭 이벤트 로깅
+  */
 }
 
-void _handleTerminatedMessage(RemoteMessage message) {
-  print("Handling a terminated message: ${message.messageId}");
-  // 여기에 앱이 종료된 상태에서 메시지 클릭 시 수행할 작업을 추가하세요.
-  // 예를 들어, 특정 화면으로 이동할 수 있습니다.
-}
-
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // 여기에 백그라운드에서 메시지 수신 시 수행할 작업을 추가하세요.
-  print("Handling a background message: ${message.messageId}");
+Future<void> _handlePushNotificationReceived(RemoteMessage message) async {
+  print("[🔥Notifly] Push Notification Received!");
+  final Map<String, dynamic>? notification = message.notification?.toMap();
+  final Map<String, dynamic> data = message.data;
+  print("[🔥Notifly] notification: $notification");
+  print("[🔥Notifly] data: $data");
+  /* 
+    TODO: 알림 수신 시 수행할 작업을 추가하세요.
+    1. 알림을 기기에 저장 (추후 알림함 구현시 사용)
+    2. 푸시 알림 수신 이벤트 로깅
+  */
 }
