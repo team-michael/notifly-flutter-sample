@@ -584,7 +584,6 @@ Future<void> _handlePushNotificationReceived(RemoteMessage message) async {
   final Map<String, dynamic> data = message.data;
   print("[🔥Notifly] notification: $notification");
   print("[🔥Notifly] data: $data");
-  NotiflyPlugin.trackEvent(eventName: 'push_received22');
   /* 
     TODO: 알림 수신 시 수행할 작업을 추가하세요.
     1. 알림을 기기에 저장 (추후 알림함 구현시 사용)
